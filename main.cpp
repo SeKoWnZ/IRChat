@@ -1,5 +1,6 @@
 #include <iostream>
 #include <string>
+#include <sstream>
 #include <vector>
 
 #include <sys/socket.h>
@@ -7,6 +8,32 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <poll.h>
+
+struct Client
+{
+	int fd;
+	std::string buffer;
+};
+
+Client* findClient(std::vector<Client>& clients, int fd)
+{
+	for (size_t i = 0; i < clients.size(); ++i)
+	{
+		if (clients[i].fd = fd)
+			return &clients[i];
+	}
+	return NULL;
+}
+
+std::vector<Client>::iterator findClientIt(std::vector<Client>& clients, int fd)
+{
+	for (std::vector<Client>::iterator it = clients.begin(); it != clients.end(); it++)
+	{
+		if (it->fd == fd)
+			return it;
+	}
+	return clients.end();
+}
 
 int	main(int argc, char** argv)
 {
@@ -31,6 +58,7 @@ int	main(int argc, char** argv)
 	listen(socket_fd, 10);
 
 	std::vector<pollfd> fds;
+	std::vector<Client> clients;
 
 	pollfd pfd;
 	pfd.fd = socket_fd;
@@ -63,6 +91,11 @@ int	main(int argc, char** argv)
 					new_pfd.fd = new_socket;
 					new_pfd.events = POLLIN;
 					fds.push_back(new_pfd);
+
+					Client new_client;
+					new_client.fd = new_socket;
+					clients.push_back(new_client);
+
 					std::cout << "Nuevo cliente: " << new_socket << std::endl;
 				}
 				else
@@ -74,11 +107,42 @@ int	main(int argc, char** argv)
 						close(fds[i].fd);
 						std::cout << "Cliente desconectado: " << fds[i].fd << std::endl;
 						fds.erase(fds.begin() + i);
+						std::vector<Client>::iterator it = findClientIt(clients, fds[i].fd);
+						if (it != clients.end())
+							clients.erase(it);
 						--i;
 						continue;
 					}
-					std::string message(buffer, bytes_read);
-					std::cout << "Received: " << message << std::endl;
+					
+					Client* client = findClient(clients, fds[i].fd);
+					if (!client)
+						continue;
+					
+					client->buffer += std::string(buffer, bytes_read);
+					
+					size_t pos;
+					while ((pos = client->buffer.find('\n')) != std::string::npos)
+					{
+						std::string line = client->buffer.substr(0, pos);
+						if (!line.empty() && line[line.size() - 1] == '\r')
+							line.erase(line.size() - 1);
+
+						std::istringstream iss(line);
+						std::string command;
+						iss >> command;
+						
+						std::vector<std::string> args;
+						std::string arg;
+
+						while (iss >> arg)
+							args.push_back(arg);
+
+						std::cout << "Comando: " << command << std::endl;
+						for (size_t h = 0; h < args.size(); h++)
+							std::cout << "ARG[" << h << "]: " << args[h] <<std::endl;
+
+						client->buffer.erase(0, pos + 1);
+					}
 				}
 			}
 		}
