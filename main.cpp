@@ -9,6 +9,22 @@
 #include <unistd.h>
 #include <poll.h>
 
+
+// TE QUIEROOOOOOOOOOO
+// Y YO A TUUUUU MUXOS MUXOTEEEEEEEEEEEEEEEEEEEEEEESSSSSSSSS, TA QUEAO CLARO?
+
+// WHILE(1)
+// 	TE QUIERO MUCHO;
+	
+// ░░░░░░░░░░░░░░░░▄▓▄░░░
+// ░░░░▄█▄░░░░░░░░▄▓▓▓▄░░
+// ░░▄█████▄░░░░░▄▓▓▓▓▓▄░
+// ░▀██┼█┼██▀░░░▄▓▓▓▓▓▓▓▄
+// ▄▄███████▄▄▄▄▄▄▄▄█▄▄▄▄ 
+
+// bonica
+// te loveu muxo yo ma   
+
 struct Client
 {
 	int fd;
@@ -27,13 +43,8 @@ struct Channel
 	std::string topic;
 
 	std::vector<int> clients;
-	std::vector<int> operators;	
+	std::vector<int> operators;
 };
-
-void sendError(int fd, const std::string& msg)
-{
-	send(fd, msg.c_str(), msg.size(), 0);
-}
 
 bool nickExists(std::vector<Client>& clients, const std::string& nick, int exclude_fd)
 {
@@ -45,7 +56,7 @@ bool nickExists(std::vector<Client>& clients, const std::string& nick, int exclu
 	return false;
 }
 
-void	removeClientFromAllChannels(std::vector<Channel>& channels, int client)
+void	removeClientFromAllChannels(std::vector<Client>& clients, std::vector<Channel>& channels, int client)
 {
 	for (size_t i = 0; i < channels.size(); i++)
 	{
@@ -55,7 +66,23 @@ void	removeClientFromAllChannels(std::vector<Channel>& channels, int client)
 			if (ch_clients[j] == client)
 			{
 				ch_clients.erase(ch_clients.begin() + j);
-				--j;
+				break;
+			}
+		}
+		std::vector<int>& ch_operators = channels[i].operators;
+		for (size_t j = 0; j < ch_operators.size(); j++)
+		{
+			if (ch_operators[j] == client)
+			{
+				ch_operators.erase(ch_operators.begin() + j);
+				if (ch_operators.empty() && !ch_clients.empty())
+				{
+					ch_operators.push_back(ch_clients[0]);
+					Client *new_op = findClient(clients, ch_clients[0]);
+					std::string msg = new_op->nickname + " is now operator\n";
+					sendToChannel(&channels[i], new_op, msg);
+				}
+				break;
 			}
 		}
 	}
@@ -223,6 +250,7 @@ int	main(int argc, char** argv)
 					clients.push_back(new_client);
 
 					std::cout << "Nuevo cliente: " << new_socket << std::endl;
+					sendToClient(new_client.fd, "Welcome to the IRC server\n");
 				}
 				else
 				{
@@ -234,7 +262,9 @@ int	main(int argc, char** argv)
 						Client* client = findClient(clients, fd_to_remove);
 						if (client)
 						{
-							removeClientFromAllChannels(channels, client->fd);
+							std::string msg = client->nickname + " has quit\n";
+							sendToAll(clients, client->fd, msg);
+							removeClientFromAllChannels(clients, channels, client->fd);
 						}
 						close(fd_to_remove);
 						std::cout << "Cliente desconectado: " << fd_to_remove << std::endl;
@@ -274,8 +304,7 @@ int	main(int argc, char** argv)
 						{
 							if (args.size() < 1)
 							{
-								std::cout << "ERROR NO NICKNAME" << std::endl; // AQUI TIENE QUE HABER UN ERROR
-								sendToClient(client->fd, "No nickname given\n");
+								sendToClient(client->fd, "ERROR: No nickname given\n");
 								client->buffer.erase(0, pos + 1);
 								continue;
 							}
@@ -284,7 +313,7 @@ int	main(int argc, char** argv)
 							
 							if (nickExists(clients, new_nick, client->fd))
 							{
-								sendToClient(client->fd, "Nickname already in use\n");
+								sendToClient(client->fd, "ERROR: Nickname already in use\n");
 								client->buffer.erase(0, pos + 1);
 								continue;
 							}
@@ -298,7 +327,7 @@ int	main(int argc, char** argv)
 						{
 							if (args.size() < 1)
 							{
-								std::cout << "ERROR NO USER" << std::endl; // AQUI TIENE QUE HABER UN ERROR
+								sendToClient(client->fd, "ERROR: No username given\n");
 								client->buffer.erase(0, pos + 1);
 								continue;
 							}
@@ -311,13 +340,13 @@ int	main(int argc, char** argv)
 						{
 							if (args.size() < 1)
 							{
-								std::cout << "ERROR NO MSG" << std::endl; // AQUI TIENE QUE HABER UN ERROR
+								sendToClient(client->fd, "ERROR: No message\n");
 								client->buffer.erase(0, pos + 1);
 								continue;
 							}
 							if (!client->registered)
 							{
-								std::cout << "ERROR CLIENT NOT REGISTERED" << std::endl; // AQUI TIENE QUE HABER UN ERROR
+								sendToClient(client->fd, "ERROR: Client not registered\n");
 								client->buffer.erase(0, pos + 1);
 								continue;
 							}
@@ -336,13 +365,13 @@ int	main(int argc, char** argv)
 						{
 							if (args.size() < 2)
 							{
-								std::cout << "ERROR NO PRIVATE MSG" << std::endl; // AQUI TIENE QUE HABER UN ERROR
+								sendToClient(client->fd, "ERROR: No message\n");
 								client->buffer.erase(0, pos + 1);
 								continue;
 							}
 							if (!client->registered)
 							{
-								std::cout << "ERROR CLIENT NOT REGISTERED" << std::endl; // AQUI TIENE QUE HABER UN ERROR
+								sendToClient(client->fd, "ERROR: Client not registered\n");
 								client->buffer.erase(0, pos + 1);
 								continue;
 							}
@@ -362,7 +391,13 @@ int	main(int argc, char** argv)
 								Channel* channel = findChannel(channels, target);
 								if (!channel)
 								{
-									std::cout << "ERROR CHANNEL NOT FOUND" << std::endl; // AQUI TIENE QUE HABER UN ERROR
+									sendToClient(client->fd, "ERROR: Channel not found\n");
+									client->buffer.erase(0, pos + 1);
+									continue;
+								}
+								if (!isClientInChannel(channel, client))
+								{
+									sendToClient(client->fd, "ERROR: You're not in this channel\n");
 									client->buffer.erase(0, pos + 1);
 									continue;
 								}
@@ -374,7 +409,7 @@ int	main(int argc, char** argv)
 								Client* target_client = findClientByNick(clients, target);
 								if (!target_client)
 								{
-									std::cout << "ERROR TARGET NOT FOUND" << std::endl; // AQUI TIENE QUE HABER UN ERROR
+									sendToClient(client->fd, "ERROR: Target not found\n");
 									client->buffer.erase(0, pos + 1);
 									continue;
 								}
@@ -386,7 +421,7 @@ int	main(int argc, char** argv)
 						{
 							if (args.size() < 1)
 							{
-								std::cout << "ERROR NO CHANNEL" << std::endl; // AQUI TIENE QUE HABER UN ERROR
+								sendToClient(client->fd, "ERROR: No channel given\n");
 								client->buffer.erase(0, pos + 1);
 								continue;
 							}
@@ -405,13 +440,13 @@ int	main(int argc, char** argv)
 							
 							if (isClientInChannel(channel, client))
 							{
-								std::cout << "Client is already on that channel" << std::endl; // CAMBIAR POR MENSAJE AL CLIENTE (?)
-								sendToClient(client->fd, "you are already on that channel!!!");
+								sendToClient(client->fd, "you are already on that channel!!!\n");
 							}
 							else
 							{
 								channel->clients.push_back(client->fd);
-								std::cout << client->nickname << " joined " << channel_name << std::endl;
+								sendToChannel(channel, client, client->nickname + " joined " + channel_name + "\n");
+								sendToClient(client->fd, client->nickname + " joined " + channel_name + "\n");
 							}
 						}
 
@@ -419,7 +454,7 @@ int	main(int argc, char** argv)
 						{
 							if (args.size() < 2)
 							{
-								std::cout << "ERROR INVITE ARGS" << std::endl; // AQUI TIENE QUE HABER UN ERROR
+								sendToClient(client->fd, "ERROR: A few args for 'INVITE'\n");
 								client->buffer.erase(0, pos + 1);
 								continue;
 							}
@@ -430,21 +465,21 @@ int	main(int argc, char** argv)
 							
 							if (!channel)
 							{
-								std::cout << "ERROR CHANNEL NOT FOUND" << std::endl; // AQUI TIENE QUE HABER UN ERROR
+								sendToClient(client->fd, "ERROR: Channel not found\n");
 								client->buffer.erase(0, pos + 1);
 								continue;
 							}
 
 							if (!isClientInChannel(channel, client))
 							{
-								sendToClient(client->fd, "You are not in this channel\n");
+								sendToClient(client->fd, "ERROR: You're not in this channel\n");
 								client->buffer.erase(0, pos + 1);
 								continue;
 							}
 
 							if (!isOperator(channel, client))
 							{
-								sendToClient(client->fd, "You are not operator\n");
+								sendToClient(client->fd, "ERROR: You're not operator\n");
 								client->buffer.erase(0, pos + 1);
 								continue;			
 							}
@@ -453,7 +488,7 @@ int	main(int argc, char** argv)
 
 							if (!target)
 							{
-								std::cout << "ERROR TARGET NOT FOUND" << std::endl; // AQUI TIENE QUE HABER UN ERROR
+								sendToClient(client->fd, "ERROR: User not found\n");
 								client->buffer.erase(0, pos + 1);
 								continue;
 							}
@@ -467,14 +502,14 @@ int	main(int argc, char** argv)
 								std::cout << client->nickname << " invited " << target_nick << " to " << channel_name << std::endl;
 							}
 							else
-								sendToClient(client->fd, "User already on channel\n");
+								sendToClient(client->fd, "ERROR: User already on channel\n");
 						}
 
 						else if (command == "MODE")
 						{
 							if (args.size() < 2)
 							{
-								std::cout << "ERROR MODE ARGS" << std::endl; // AQUI TIENE QUE HABER UN ERROR
+								sendToClient(client->fd, "ERROR: A few args for 'MODE'\n");
 								client->buffer.erase(0, pos + 1);
 								continue;
 							}
@@ -485,21 +520,21 @@ int	main(int argc, char** argv)
 							
 							if (!channel)
 							{
-								std::cout << "ERROR CHANNEL NOT FOUND" << std::endl; // AQUI TIENE QUE HABER UN ERROR
+								sendToClient(client->fd, "ERROR: Channel not found\n");
 								client->buffer.erase(0, pos + 1);
 								continue;
 							}
 
 							if (!isOperator(channel, client))
 							{
-								sendToClient(client->fd, "You are not operator\n");
+								sendToClient(client->fd, "ERROR: You're not operator\n");
 								client->buffer.erase(0, pos + 1);
 								continue;			
 							}
 
 							if (args.size() < 3)
 							{
-								std::cout << "ERROR NO TARGET" << std::endl; // AQUI TIENE QUE HABER UN ERROR
+								sendToClient(client->fd, "ERROR: A few args for 'MODE'\n");
 								client->buffer.erase(0, pos + 1);
 								continue;
 							}
@@ -509,7 +544,7 @@ int	main(int argc, char** argv)
 
 							if (!target)
 							{
-								std::cout << "ERROR TARGET NOT FOUND" << std::endl; // AQUI TIENE QUE HABER UN ERROR
+								sendToClient(client->fd, "ERROR: User not found\n");
 								client->buffer.erase(0, pos + 1);
 								continue;
 							}
@@ -532,6 +567,12 @@ int	main(int argc, char** argv)
 										std::string msg = target_nick + " is no longer operator\n";
 										sendToChannel(channel, client, msg);
 										ops.erase(ops.begin() + j);
+										if (channel->operators.empty() && !channel->clients.empty())
+										{
+											channel->operators.push_back(channel->clients[0]);
+											std::string msg = findClient(clients, channel->clients[0])->nickname + " is now operator\n";
+											sendToChannel(channel,client, msg);
+										}
 										break;
 									}
 								}
@@ -542,7 +583,7 @@ int	main(int argc, char** argv)
 						{
 							if (args.size() < 1)
 							{
-								std::cout << "ERROR NO CHANNEL" << std::endl; // AQUI TIENE QUE HABER UN ERROR
+								sendToClient(client->fd, "ERROR: A few args for 'TOPIC'\n");
 								client->buffer.erase(0, pos + 1);
 								continue;
 							}
@@ -551,7 +592,7 @@ int	main(int argc, char** argv)
 							
 							if (!channel)
 							{
-								std::cout << "ERROR NO CHANNEL" << std::endl; // AQUI TIENE QUE HABER UN ERROR
+								sendToClient(client->fd, "ERROR: Channel not found\n");
 								client->buffer.erase(0, pos + 1);
 								continue;
 							}
@@ -587,13 +628,12 @@ int	main(int argc, char** argv)
 								}
 								else
 								{
-									sendToClient(client->fd, "You are not op to change the topic");
+									sendToClient(client->fd, "ERROR: You are not op to change the topic\n");
 								}
 							}
 							else
 							{
-								std::cout << "ERROR NOT IN CHANNEL" << std::endl;
-								sendToClient(client->fd, "You are not in " + channel->name + " channel\n");
+								sendToClient(client->fd, "ERROR: You are not in " + channel->name + " channel\n");
 							}
 						}
 						
@@ -601,7 +641,7 @@ int	main(int argc, char** argv)
 						{
 							if (args.size() < 1)
 							{
-								std::cout << "ERROR NO CHANNEL" << std::endl; // AQUI TIENE QUE HABER UN ERROR
+								sendToClient(client->fd, "ERROR: A few args for 'PART'\n");
 								client->buffer.erase(0, pos + 1);
 								continue;
 							}
@@ -610,14 +650,14 @@ int	main(int argc, char** argv)
 							
 							if (!channel)
 							{
-								std::cout << "ERROR NO CHANNEL" << std::endl; // AQUI TIENE QUE HABER UN ERROR
+								sendToClient(client->fd, "ERROR: Channel not found\n");
 								client->buffer.erase(0, pos + 1);
 								continue;
 							}
 							
 							if (!isClientInChannel(channel, client))
 							{
-								std::cout << "ERROR NO IN CHANNEL" << std::endl; // AQUI TIENE QUE HABER UN ERROR
+								sendToClient(client->fd, "ERROR: You are not in " + channel->name + " channel\n");
 								client->buffer.erase(0, pos + 1);
 								continue;
 							}
@@ -633,17 +673,33 @@ int	main(int argc, char** argv)
 									break;
 								}
 							}
+							std::vector<int>& ch_operators = channel->operators;
+							for (size_t j = 0; j < ch_operators.size(); ++j)
+							{
+								if (ch_operators[j] == client->fd)
+								{
+									ch_operators.erase(ch_operators.begin() + j);
+									break;
+								}
+							}
+							if (channel->operators.empty() && !channel->clients.empty())
+							{
+								channel->operators.push_back(channel->clients[0]);
+								std::string msg = findClient(clients, channel->clients[0])->nickname + " is now operator\n";
+								sendToChannel(channel,client, msg);
+							}
 							if (channel->clients.empty())
-							removeEmptyChannels(channels);
+								removeEmptyChannels(channels);
 						}
 
 						else if (command == "QUIT")
 						{
-							std::cout << "Cliente hizo QUIT: " << client->fd << std::endl;
 
 							client->to_delete = true;
-
-							removeClientFromAllChannels(channels, client->fd);
+							
+							std::string msg = client->nickname + " has quit\n";
+							sendToAll(clients, client->fd, msg);
+							removeClientFromAllChannels(clients, channels, client->fd);
 
 							break;
 						}
