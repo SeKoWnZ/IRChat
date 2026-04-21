@@ -30,6 +30,21 @@ struct Channel
 	std::vector<int> operators;	
 };
 
+void sendError(int fd, const std::string& msg)
+{
+	send(fd, msg.c_str(), msg.size(), 0);
+}
+
+bool nickExists(std::vector<Client>& clients, const std::string& nick, int exclude_fd)
+{
+	for (size_t i = 0; i < clients.size(); i++)
+	{
+		if (clients[i].nickname == nick && clients[i].fd != exclude_fd)
+			return true;
+	}
+	return false;
+}
+
 void	removeClientFromAllChannels(std::vector<Channel>& channels, int client)
 {
 	for (size_t i = 0; i < channels.size(); i++)
@@ -48,7 +63,6 @@ void	removeClientFromAllChannels(std::vector<Channel>& channels, int client)
 
 void	removeEmptyChannels(std::vector<Channel>& channels)
 {
-	std::cout << "PATATAAAAA" << std::endl;
 	for (size_t i = 0; i < channels.size(); i++)
 	{
 		if (channels[i].clients.empty())
@@ -261,11 +275,22 @@ int	main(int argc, char** argv)
 							if (args.size() < 1)
 							{
 								std::cout << "ERROR NO NICKNAME" << std::endl; // AQUI TIENE QUE HABER UN ERROR
+								sendToClient(client->fd, "No nickname given\n");
 								client->buffer.erase(0, pos + 1);
 								continue;
 							}
-							client->nickname = args[0];
 
+							std::string new_nick = args[0];
+							
+							if (nickExists(clients, new_nick, client->fd))
+							{
+								sendToClient(client->fd, "Nickname already in use\n");
+								client->buffer.erase(0, pos + 1);
+								continue;
+							}
+
+							client->nickname = new_nick;
+							
 							std::cout << "Nick set to: " << client->nickname << std::endl;
 						}
 
