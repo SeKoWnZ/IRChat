@@ -48,11 +48,22 @@ struct Channel
 
 	std::vector<int> clients;
 	std::vector<int> operators;
+	std::vector<int> invited;
 
 	bool invite_only;
 	bool topic_protected;
 
 };
+
+bool isInvited(Channel* channel, Client* client)
+{
+		for (size_t i = 0; i < channel->invited.size(); i++)
+		{
+			if (channel->invited[i] == client->fd);
+				return true;
+		}
+		return false;
+}
 
 bool nickExists(std::vector<Client>& clients, const std::string& nick, int exclude_fd)
 {
@@ -498,7 +509,7 @@ int	main(int argc, char** argv)
 							}
 
 							std::string channel_name = args[0];
-							if (channel_name[0] != '#')
+							if (channel_name.empty() || channel_name[0] != '#')
 							{
 								sendToClient(client->fd, "ERROR: Invalid channel format\n");
 								client->buffer.erase(0, pos + 1);
@@ -521,31 +532,30 @@ int	main(int argc, char** argv)
 								sendToClient(client->fd, "You are now operator of " +  channel_name + "\n");
 							}
 							else if (isClientInChannel(channel, client))
-							{
 								sendToClient(client->fd, "you are already on that channel!!!\n");
-							}
-							else if (channel->invite_only)
-							{
+							else if (!channel->key.empty() && (args.size() < 2 || args[1] != channel->key))
+								sendToClient(client->fd, "ERROR: Bad key\n");
+							else if (channel->invite_only && !isInvited(channel, client))
 								sendToClient(client->fd, "ERROR: Invite only channel\n");
-							}
 							else if (channel->user_limit != -1 && channel->clients.size() >= (size_t)channel->user_limit)
-							{
 								sendToClient(client->fd, "ERROR: Channel is full\n");
-							}
 							else
 							{
-								if (!channel->key.empty())
+								channel->clients.push_back(client->fd);
+								sendToChannel(channel, client->fd, client->nickname + " joined " + channel_name + "\n");
+								sendToClient(client->fd, client->nickname + " joined " + channel_name + "\n");
+								
+								if (channel->invite_only)
 								{
-									if (args.size() < 2 || args[1] != channel->key)
+									std::vector<int>& invited = channel->invited;
+									for (size_t j = 0; j < invited.size(); j++)
 									{
-										sendToClient(client->fd, "ERROR: Bad key\n");
+										if (invited[j] == client->fd)
+										{
+											invited.erase(invited.begin() + j);
+											break;
+										}
 									}
-								}
-								else
-								{
-									channel->clients.push_back(client->fd);
-									sendToChannel(channel, client->fd, client->nickname + " joined " + channel_name + "\n");
-									sendToClient(client->fd, client->nickname + " joined " + channel_name + "\n");
 								}
 							}
 						}
@@ -593,16 +603,18 @@ int	main(int argc, char** argv)
 								continue;
 							}
 							
-							if (!isClientInChannel(channel, target))
+							if (isClientInChannel(channel, target))
 							{
-								std::string msg = "You have been invited to " + channel_name + "\n";
-								sendToClient(target->fd, msg);
-								sendToClient(client->fd, "Invitation sent\n");
-
-								std::cout << client->nickname << " invited " << target_nick << " to " << channel_name << std::endl;
-							}
-							else
 								sendToClient(client->fd, "ERROR: User already on channel\n");
+								client->buffer.erase(0, pos + 1);
+								continue;
+							}
+
+							if (!isInvited(channel, target))
+								channel->invited.push_back(target->fd);
+
+							sendToClient(target->fd, "You have been invited to " + channel_name + "\n");
+							sendToClient(client->fd, "Invitation sent\n");
 						}
 
 						else if (command == "MODE")
