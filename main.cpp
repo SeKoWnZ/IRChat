@@ -34,6 +34,7 @@ struct Client
 	std::string username;
 
 	bool registered;
+	bool pass_ok;
 	bool to_delete = false;
 };
 
@@ -41,9 +42,16 @@ struct Channel
 {
 	std::string name;
 	std::string topic;
+	std::string key;
+
+	int user_limit;
 
 	std::vector<int> clients;
 	std::vector<int> operators;
+
+	bool invite_only;
+	bool topic_protected;
+
 };
 
 bool nickExists(std::vector<Client>& clients, const std::string& nick, int exclude_fd)
@@ -54,38 +62,6 @@ bool nickExists(std::vector<Client>& clients, const std::string& nick, int exclu
 			return true;
 	}
 	return false;
-}
-
-void	removeClientFromAllChannels(std::vector<Client>& clients, std::vector<Channel>& channels, int client)
-{
-	for (size_t i = 0; i < channels.size(); i++)
-	{
-		std::vector<int>& ch_clients = channels[i].clients;
-		for (size_t j = 0; j < ch_clients.size(); j++)
-		{
-			if (ch_clients[j] == client)
-			{
-				ch_clients.erase(ch_clients.begin() + j);
-				break;
-			}
-		}
-		std::vector<int>& ch_operators = channels[i].operators;
-		for (size_t j = 0; j < ch_operators.size(); j++)
-		{
-			if (ch_operators[j] == client)
-			{
-				ch_operators.erase(ch_operators.begin() + j);
-				if (ch_operators.empty() && !ch_clients.empty())
-				{
-					ch_operators.push_back(ch_clients[0]);
-					Client *new_op = findClient(clients, ch_clients[0]);
-					std::string msg = new_op->nickname + " is now operator\n";
-					sendToChannel(&channels[i], new_op, msg);
-				}
-				break;
-			}
-		}
-	}
 }
 
 void	removeEmptyChannels(std::vector<Channel>& channels)
@@ -136,7 +112,7 @@ Channel* findChannel(std::vector<Channel>& channels, const std::string& name)
 	for (size_t i = 0; i < channels.size(); ++i)
 	{
 		if (channels[i].name == name)
-			return &channels[i];
+		return &channels[i];
 	}
 	return NULL;
 }
@@ -151,15 +127,15 @@ void sendToAll(std::vector<Client>& clients, int sender_fd, const std::string& m
 	for (size_t i = 0; i < clients.size(); ++i)
 	{
 		if (clients[i].fd != sender_fd && clients[i].registered)
-			sendToClient(clients[i].fd, msg);
+		sendToClient(clients[i].fd, msg);
 	}
 }
 
-void sendToChannel(Channel* channel, Client* sender, const std::string& msg)
+void sendToChannel(Channel* channel, int sender, const std::string& msg)
 {
 	for (size_t i = 0; i < channel->clients.size(); ++i)
 	{
-		if (channel->clients[i] != sender->fd)
+		if (channel->clients[i] != sender)
 			send(channel->clients[i], msg.c_str(), msg.size(), 0);
 	}
 }
@@ -170,7 +146,7 @@ bool isClientInChannel(Channel* channel, Client* client)
 	{
 		if (channel->clients[i] == client->fd)
 			return true;
-	}
+		}
 	return false;
 }
 
@@ -179,25 +155,93 @@ bool isOperator(Channel* channel, Client* client)
 	for (size_t i = 0; i < channel->operators.size(); i++)
 	{
 		if (channel->operators[i] == client->fd)
-			return true;
+		return true;
 	}
 	return false;
 }
 
+void	removeClientFromAllChannels(std::vector<Client>& clients, std::vector<Channel>& channels, int client)
+{
+	for (size_t i = 0; i < channels.size(); i++)
+	{
+		std::vector<int>& ch_clients = channels[i].clients;
+		for (size_t j = 0; j < ch_clients.size(); j++)
+		{
+			if (ch_clients[j] == client)
+			{
+				ch_clients.erase(ch_clients.begin() + j);
+				break;
+			}
+		}
+		std::vector<int>& ch_operators = channels[i].operators;
+		for (size_t j = 0; j < ch_operators.size(); j++)
+		{
+			if (ch_operators[j] == client)
+			{
+				ch_operators.erase(ch_operators.begin() + j);
+				if (ch_operators.empty() && !ch_clients.empty())
+				{
+					ch_operators.push_back(ch_clients[0]);
+					Client *new_op = findClient(clients, ch_clients[0]);
+					std::string msg = new_op->nickname + " is now operator\n";
+					sendToChannel(&channels[i], client, msg);
+				}
+				break;
+			}
+		}
+	}
+}
+
+bool isValidPort(const std::string& str, int& port)
+{
+    if (str.empty())
+        return false;
+
+    for (size_t i = 0; i < str.size(); i++)
+    {
+        if (!isdigit(str[i]))
+            return false;
+    }
+
+    std::istringstream iss(str);
+    iss >> port;
+
+    if (port < 1024 || port > 65535)
+        return false;
+
+    return true;
+}
+
 int	main(int argc, char** argv)
 {
+	if (argc != 3)
+	{
+		std::cerr << "Usage: ./ircserv <port> <password>\n";
+		return 1;
+	}
+
+	int port;
+
+	if (!isValidPort(argv[1], port))
+	{
+		std::cerr << "Invalid port. Use number between 1024 and 65535\n";
+		return 1;
+	}
+
+	std::string server_password = argv[2];
+
 	int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
 	if (socket_fd < 0)
 		return 1;
-
+	
 	int opt = 1;	
 	setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
-
+	
 	struct sockaddr_in address = {};
 	address.sin_family = AF_INET;
-	address.sin_port = htons(6667);
+	address.sin_port = htons(port);
 	address.sin_addr.s_addr = INADDR_ANY;
-
+	
 	if (bind(socket_fd, (struct sockaddr *)&address, sizeof(address)))
 	{
 		perror("bind failed");
@@ -209,7 +253,7 @@ int	main(int argc, char** argv)
 	std::vector<pollfd> fds;
 	std::vector<Client> clients;
 	std::vector<Channel> channels;
-
+	
 	pollfd pfd;
 	pfd.fd = socket_fd;
 	pfd.events = POLLIN;
@@ -246,6 +290,7 @@ int	main(int argc, char** argv)
 					new_client.fd = new_socket;
 					new_client.nickname = "";
 					new_client.username = "";
+					new_client.pass_ok = false;
 					new_client.registered = false;
 					clients.push_back(new_client);
 
@@ -336,6 +381,32 @@ int	main(int argc, char** argv)
 							std::cout << "User set to: " << client->username << std::endl;
 						}
 
+						else if (command == "PASS")
+						{
+							if (args.size() < 1)
+							{
+								sendToClient(client->fd, "ERROR: No password given\n");
+								client->buffer.erase(0, pos + 1);
+								continue;
+							}
+
+							if (client->registered)
+							{
+								sendToClient(client->fd, "ERROR: Already registered\n");
+								client->buffer.erase(0, pos + 1);
+								continue;
+							}
+
+							if (args[0] != server_password)
+							{
+								sendToClient(client->fd, "ERROR: Wrong password\n");
+								client->buffer.erase(0, pos + 1);
+								continue;
+							}
+
+							client->pass_ok = true;
+						}
+
 						else if (command == "MSG")
 						{
 							if (args.size() < 1)
@@ -401,7 +472,7 @@ int	main(int argc, char** argv)
 									client->buffer.erase(0, pos + 1);
 									continue;
 								}
-								sendToChannel(channel, client, full_msg);
+								sendToChannel(channel, client->fd, full_msg);
 							}
 							
 							else
@@ -425,28 +496,57 @@ int	main(int argc, char** argv)
 								client->buffer.erase(0, pos + 1);
 								continue;
 							}
+
 							std::string channel_name = args[0];
+							if (channel_name[0] != '#')
+							{
+								sendToClient(client->fd, "ERROR: Invalid channel format\n");
+								client->buffer.erase(0, pos + 1);
+								continue;
+							}
+
 							Channel *channel = findChannel(channels, channel_name);
 
 							if (!channel)
 							{
 								Channel new_channel;
 								new_channel.name = channel_name;
+								new_channel.invite_only = false;
+								new_channel.topic_protected = false;
+								new_channel.key = "";
+								new_channel.user_limit = -1;
 								channels.push_back(new_channel);
 								channel = &channels.back();
 								channel->operators.push_back(client->fd);
 								sendToClient(client->fd, "You are now operator of " +  channel_name + "\n");
 							}
-							
-							if (isClientInChannel(channel, client))
+							else if (isClientInChannel(channel, client))
 							{
 								sendToClient(client->fd, "you are already on that channel!!!\n");
 							}
+							else if (channel->invite_only)
+							{
+								sendToClient(client->fd, "ERROR: Invite only channel\n");
+							}
+							else if (channel->user_limit != -1 && channel->clients.size() >= (size_t)channel->user_limit)
+							{
+								sendToClient(client->fd, "ERROR: Channel is full\n");
+							}
 							else
 							{
-								channel->clients.push_back(client->fd);
-								sendToChannel(channel, client, client->nickname + " joined " + channel_name + "\n");
-								sendToClient(client->fd, client->nickname + " joined " + channel_name + "\n");
+								if (!channel->key.empty())
+								{
+									if (args.size() < 2 || args[1] != channel->key)
+									{
+										sendToClient(client->fd, "ERROR: Bad key\n");
+									}
+								}
+								else
+								{
+									channel->clients.push_back(client->fd);
+									sendToChannel(channel, client->fd, client->nickname + " joined " + channel_name + "\n");
+									sendToClient(client->fd, client->nickname + " joined " + channel_name + "\n");
+								}
 							}
 						}
 
@@ -509,18 +609,25 @@ int	main(int argc, char** argv)
 						{
 							if (args.size() < 2)
 							{
-								sendToClient(client->fd, "ERROR: A few args for 'MODE'\n");
+								sendToClient(client->fd, "ERROR: Need more params for MODE\n");
 								client->buffer.erase(0, pos + 1);
 								continue;
 							}
 
 							std::string channel_name = args[0];
 							std::string mode = args[1];
-							Channel *channel = findChannel(channels, channel_name);
-							
+
+							Channel* channel = findChannel(channels, channel_name);
 							if (!channel)
 							{
 								sendToClient(client->fd, "ERROR: Channel not found\n");
+								client->buffer.erase(0, pos + 1);
+								continue;
+							}
+
+							if (!isClientInChannel(channel, client))
+							{
+								sendToClient(client->fd, "ERROR: You're not in this channel\n");
 								client->buffer.erase(0, pos + 1);
 								continue;
 							}
@@ -529,56 +636,102 @@ int	main(int argc, char** argv)
 							{
 								sendToClient(client->fd, "ERROR: You're not operator\n");
 								client->buffer.erase(0, pos + 1);
-								continue;			
-							}
-
-							if (args.size() < 3)
-							{
-								sendToClient(client->fd, "ERROR: A few args for 'MODE'\n");
-								client->buffer.erase(0, pos + 1);
 								continue;
 							}
+						
+							if (mode == "+i")
+								channel->invite_only = true;
+							else if (mode == "-i")
+								channel->invite_only = false;
 
-							std::string target_nick = args[2];
-							Client* target = findClientByNick(clients, target_nick);
+							else if (mode == "+t")
+								channel->topic_protected = true;
+							else if (mode == "-t")
+								channel->topic_protected = false;
 
-							if (!target)
+							else if (mode == "+k")
 							{
-								sendToClient(client->fd, "ERROR: User not found\n");
-								client->buffer.erase(0, pos + 1);
-								continue;
-							}
-
-							if (mode == "+o" && !isOperator(channel, target))
-							{
-								channel->operators.push_back(target->fd);
-								
-								std::string msg = target->nickname + " is now operator\n";
-								sendToChannel(channel,client, msg);
-							}
-							else if (mode == "-o")
-							{
-								std::vector<int>& ops = channel->operators;
-
-								for (size_t j = 0; j < ops.size(); j++)
+								if (args.size() < 3)
 								{
-									if (ops[j] == target->fd)
+									sendToClient(client->fd, "ERROR: Need key\n");
+									client->buffer.erase(0, pos + 1);
+									continue;
+								}
+								channel->key = args[2];
+							}
+							else if (mode == "-k")
+								channel->key = "";
+
+							else if (mode == "+l")
+							{
+								if (args.size() < 3)
+								{
+									sendToClient(client->fd, "ERROR: Need limit\n");
+									client->buffer.erase(0, pos + 1);
+									continue;
+								}
+								channel->user_limit = atoi(args[2].c_str());
+							}
+							else if (mode == "-l")
+								channel->user_limit = -1;
+
+							else if (mode == "+o" || mode == "-o")
+							{
+								if (args.size() < 3)
+								{
+									sendToClient(client->fd, "ERROR: Need target\n");
+									client->buffer.erase(0, pos + 1);
+									continue;
+								}
+
+								Client* target = findClientByNick(clients, args[2]);
+								if (!target)
+								{
+									sendToClient(client->fd, "ERROR: User not found\n");
+									client->buffer.erase(0, pos + 1);
+									continue;
+								}
+
+								if (!isClientInChannel(channel, target))
+								{
+									sendToClient(client->fd, "ERROR: User not in channel\n");
+									client->buffer.erase(0, pos + 1);
+									continue;
+								}
+
+								if (mode == "+o" && !isOperator(channel, target))
+								{
+									channel->operators.push_back(target->fd);
+									sendToChannel(channel, client->fd, target->nickname + " is now operator\n");
+								}
+								else if (mode == "-o")
+								{
+									std::vector<int>& ops = channel->operators;
+
+									for (size_t j = 0; j < ops.size(); j++)
 									{
-										std::string msg = target_nick + " is no longer operator\n";
-										sendToChannel(channel, client, msg);
-										ops.erase(ops.begin() + j);
-										if (channel->operators.empty() && !channel->clients.empty())
+										if (ops[j] == target->fd)
 										{
-											channel->operators.push_back(channel->clients[0]);
-											std::string msg = findClient(clients, channel->clients[0])->nickname + " is now operator\n";
-											sendToChannel(channel,client, msg);
+											ops.erase(ops.begin() + j);
+											sendToChannel(channel, client->fd, target->nickname + " is no longer operator\n");
+
+											if (ops.empty() && !channel->clients.empty())
+											{
+												channel->operators.push_back(channel->clients[0]);
+												Client* new_op = findClient(clients, channel->clients[0]);
+												if (new_op)
+													sendToChannel(channel, new_op->fd, new_op->nickname + " is now operator\n");
+											}
+											break;
 										}
-										break;
 									}
 								}
 							}
+							else
+							{
+								sendToClient(client->fd, "ERROR: Unknown mode\n");
+							}
 						}
-
 						else if (command == "TOPIC")
 						{
 							if (args.size() < 1)
@@ -605,7 +758,7 @@ int	main(int argc, char** argv)
 							
 							else if (args.size() > 1 && isClientInChannel(channel, client))
 							{
-								if (isOperator(channel, client))
+								if (!channel->topic_protected || isOperator(channel, client))
 								{
 									std::string topic;
 									for (size_t j = 1; j < args.size(); j++)
@@ -622,7 +775,7 @@ int	main(int argc, char** argv)
 
 
 									std::string msg = client->nickname + " changed topic to: " + topic + '\n';
-									sendToChannel(channel, client, msg);
+									sendToChannel(channel, client->fd, msg);
 
 									std::cout << "Nuevo topic en " << channel_name << ": " << topic << std::endl;
 								}
@@ -635,6 +788,109 @@ int	main(int argc, char** argv)
 							{
 								sendToClient(client->fd, "ERROR: You are not in " + channel->name + " channel\n");
 							}
+						}
+
+						else if (command == "KICK")
+						{
+						if (args.size() < 2)
+						{
+							sendToClient(client->fd, "ERROR: Need more params for KICK\n");
+							client->buffer.erase(0, pos + 1);
+							continue;
+						}
+
+						std::string channel_name = args[0];
+						std::string target_nick = args[1];
+
+						Channel* channel = findChannel(channels, channel_name);
+						if (!channel)
+						{
+							sendToClient(client->fd, "ERROR: Channel not found\n");
+							client->buffer.erase(0, pos + 1);
+							continue;
+						}
+
+						if (!isClientInChannel(channel, client))
+						{
+							sendToClient(client->fd, "ERROR: You're not in this channel\n");
+							client->buffer.erase(0, pos + 1);
+							continue;
+						}
+
+						if (!isOperator(channel, client))
+						{
+							sendToClient(client->fd, "ERROR: You're not operator\n");
+							client->buffer.erase(0, pos + 1);
+							continue;
+						}
+
+						Client* target = findClientByNick(clients, target_nick);
+						if (!target)
+						{
+							sendToClient(client->fd, "ERROR: User not found\n");
+							client->buffer.erase(0, pos + 1);
+							continue;
+						}
+
+						if (!isClientInChannel(channel, target))
+						{
+							sendToClient(client->fd, "ERROR: User not in channel\n");
+							client->buffer.erase(0, pos + 1);
+							continue;
+						}
+
+						std::string reason = "Kicked";
+						if (args.size() > 2)
+						{
+							reason = "";
+							for (size_t j = 2; j < args.size(); j++)
+							{
+								reason += args[j];
+								if (j < args.size() - 1)
+									reason += " ";
+							}
+							if (!reason.empty() && reason[0] == ':')
+								reason.erase(0, 1);
+						}
+
+						std::string msg = client->nickname + " kicked " + target->nickname + " (reason: " + reason + ")\n";
+						sendToChannel(channel, target->fd, msg);
+						sendToClient(target->fd, msg);
+
+						std::vector<int>& ch_clients = channel->clients;
+						for (size_t j = 0; j < ch_clients.size(); j++)
+						{
+							if (ch_clients[j] == target->fd)
+							{
+								ch_clients.erase(ch_clients.begin() + j);
+								break;
+							}
+						}
+
+						std::vector<int>& ch_ops = channel->operators;
+						for (size_t j = 0; j < ch_ops.size(); j++)
+						{
+							if (ch_ops[j] == target->fd)
+							{
+								ch_ops.erase(ch_ops.begin() + j);
+								break;
+							}
+						}
+
+						if (channel->operators.empty() && !channel->clients.empty())
+						{
+							channel->operators.push_back(channel->clients[0]);
+
+							Client* new_op = findClient(clients, channel->clients[0]);
+							if (new_op)
+							{
+								std::string op_msg = new_op->nickname + " is now operator\n";
+								sendToChannel(channel, new_op->fd, op_msg);
+							}
+						}
+
+						if (channel->clients.empty())
+							removeEmptyChannels(channels);
 						}
 						
 						else if (command == "PART")
@@ -668,7 +924,7 @@ int	main(int argc, char** argv)
 								if (ch_clients[j] == client->fd)
 								{
 									std::string msg = client->nickname + " left " + channel_name + '\n';
-									sendToChannel(channel, client, msg);
+									sendToChannel(channel, client->fd, msg);
 									ch_clients.erase(ch_clients.begin() + j);
 									break;
 								}
@@ -686,7 +942,7 @@ int	main(int argc, char** argv)
 							{
 								channel->operators.push_back(channel->clients[0]);
 								std::string msg = findClient(clients, channel->clients[0])->nickname + " is now operator\n";
-								sendToChannel(channel,client, msg);
+								sendToChannel(channel,client->fd, msg);
 							}
 							if (channel->clients.empty())
 								removeEmptyChannels(channels);
@@ -704,7 +960,10 @@ int	main(int argc, char** argv)
 							break;
 						}
 						
-						if (!client->registered && !client->nickname.empty() && !client->username.empty())
+						if (!client->registered 
+							&& !client->nickname.empty() 
+							&& !client->username.empty() 
+							&& client->pass_ok)
 						{
 							client->registered = true;
 							std::cout << "Cliente registrado: " << client->nickname << std::endl;
