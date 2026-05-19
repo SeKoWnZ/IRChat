@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <poll.h>
 #include <signal.h>
+#include <fcntl.h>
 
 // TE QUIEROOOOOOOOOOO
 // Y YO A TUUUUU MUXOS MUXOTEEEEEEEEEEEEEEEEEEEEEEESSSSSSSSS, TA QUEAO CLARO?
@@ -149,7 +150,9 @@ Channel* findChannel(std::vector<Channel>& channels, const std::string& name)
 
 void sendToClient(int fd, const std::string& msg)
 {
-	send(fd, msg.c_str(), msg.size(), 0);
+	ssize_t ret =  send(fd, msg.c_str(), msg.size(), MSG_DONTWAIT);
+	if (ret <= 0)
+		std::cout << "Send failed to fd " << fd << std::endl;
 }
 
 void sendToAll(std::vector<Client>& clients, int sender_fd, const std::string& msg)
@@ -166,7 +169,11 @@ void sendToChannel(Channel* channel, int sender, const std::string& msg)
 	for (size_t i = 0; i < channel->clients.size(); ++i)
 	{
 		if (channel->clients[i] != sender)
-			send(channel->clients[i], msg.c_str(), msg.size(), 0);
+		{
+			ssize_t ret =  send(channel->clients[i], msg.c_str(), msg.size(), MSG_DONTWAIT);
+			if (ret <= 0)
+			std::cout << "Send failed to fd " << channel->clients[i] << std::endl;
+		}
 	}
 }
 
@@ -273,7 +280,7 @@ int	main(int argc, char** argv)
 	int socket_fd = socket(AF_INET, SOCK_STREAM, 0);
 	if (socket_fd < 0)
 		return 1;
-	
+	fcntl(socket_fd, F_SETFL, O_NONBLOCK);
 	int opt = 1;	
 	setsockopt(socket_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
 	
@@ -311,6 +318,30 @@ int	main(int argc, char** argv)
 
 		for (size_t i = 0; i < fds.size(); ++i)
 		{
+			if (fds[i].events & (POLL_HUP, POLL_ERR, POLLNVAL))
+			{
+				int fd_to_remove = fds[i].fd;
+
+				Client* client = findClient(clients, fd_to_remove);
+				if (client)
+				{
+					std::string msg = client->nickname + " has disconnected\r\n";
+					sendToAll(clients, client->fd, msg);
+					removeClientFromAllChannels(clients, channels, client->fd);
+				}
+				close(fd_to_remove);
+
+				std::vector<Client>::iterator it = findClientIt(clients, fd_to_remove);
+
+				if (it != clients.end())
+					clients.erase(it);
+				
+				fds.erase(fds.begin() + i);
+
+				removeEmptyChannels(channels);
+				--i;
+				continue;
+			}
 			if (fds[i].revents & POLLIN)
 			{
 				if (fds[i].fd == socket_fd)
@@ -321,6 +352,7 @@ int	main(int argc, char** argv)
 						perror("accept failed");
 						continue;
 					}
+					fcntl(new_socket, F_SETFL, O_NONBLOCK);
 					pollfd new_pfd;
 					new_pfd.fd = new_socket;
 					new_pfd.events = POLLIN;
@@ -513,7 +545,8 @@ int	main(int argc, char** argv)
 								if (j < args.size() - 1)
 								msg += " ";
 							}
-							std::string full_msg = client->nickname + ": " + msg + "\r\n";
+							std::string full_msg = ":" + client->nickname + "!" + client->username +
+							"@localhost PRIVMSG "  + target + " :" + msg + "\r\n";
 
 							if (target[0] == '#')
 							{
@@ -877,7 +910,6 @@ int	main(int argc, char** argv)
 
 										channel->topic = topic;
 
-
 										std::string msg = client->nickname + " changed topic to: " + topic + "\r\n";
 										sendToChannel(channel, client->fd, msg);
 
@@ -972,7 +1004,7 @@ int	main(int argc, char** argv)
 									reason.erase(0, 1);
 							}
 
-							std::string msg = client->nickname + " kicked " + target->nickname + " (reason: " + reason + ")\r\n";
+							std::string msg = ":" + client->nickname + " KICK " + channel->name + " " + target->nickname + " :" + reason + "\r\n";
 							sendToChannel(channel, target->fd, msg);
 							sendToClient(target->fd, msg);
 
@@ -1079,7 +1111,7 @@ int	main(int argc, char** argv)
 
 							client->to_delete = true;
 							
-							std::string msg = client->nickname + " has quit\r\n";
+							std::string msg = ":" + client->nickname + " QUIT :Quit\r\n";
 							sendToAll(clients, client->fd, msg);
 							removeClientFromAllChannels(clients, channels, client->fd);
 
@@ -1092,7 +1124,10 @@ int	main(int argc, char** argv)
 							&& client->pass_ok)
 						{
 							client->registered = true;
-							std::cout << "Cliente registrado: " << client->nickname << std::endl;
+							sendToClient(client->fd, ":ircserv 001 " + client->nickname + " :Welcome to the IRC server\r\n");
+							sendToClient(client->fd, ":ircserv 002 " + client->nickname + " :Your host is ircserv\r\n");
+							sendToClient(client->fd, ":ircserv 003 " + client->nickname + " :This server was created today\r\n");
+							sendToClient(client->fd, ":ircserv 004 " + client->nickname + " ircserv 1.0 o o\r\n");
 						}
 
 						client->buffer.erase(0, pos + 1);
