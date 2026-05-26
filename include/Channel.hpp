@@ -23,7 +23,10 @@ class Channel
 
 	public:
 
+		Channel();
 		Channel(const std::string name);
+		Channel(const Channel& other);
+		Channel& operator=(const Channel& other);
 		~Channel();
 
 		std::string getName() const;

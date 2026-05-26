@@ -24,6 +24,32 @@ Client::Client(int fd) : _fd(fd)
 
 Client::~Client(){}
 
+Client::Client(const Client& other) : _fd(other._fd)
+{
+	_buffer = other._buffer;
+	_send_buffer = other._send_buffer;
+	_nickname = other._nickname;
+	_username = other._username;
+	_registered = other._registered;
+	_pass_ok = other._pass_ok;
+	_to_delete = other._to_delete;
+}
+
+Client& Client::operator=(const Client& other)
+{
+	if (this != &other)
+	{
+		_buffer = other._buffer;
+		_send_buffer = other._send_buffer;
+		_nickname = other._nickname;
+		_username = other._username;
+		_registered = other._registered;
+		_pass_ok = other._pass_ok;
+		_to_delete = other._to_delete;
+	}
+	return *this;
+}
+
 int Client::getFd() const
 {
 	return _fd;

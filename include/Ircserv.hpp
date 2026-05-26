@@ -18,3 +18,23 @@
 
 #include <Client.hpp>
 #include <Channel.hpp>
+
+bool isClientInChannel(Channel* channel, Client* client);
+bool isOperator(Channel* channel, Client* client);
+bool isValidLimit(const std::string& str, int& limit);
+bool isInvited(Channel* channel, Client* client);
+bool nickExists(std::vector<Client>& clients, const std::string& nick, int exclude_fd);
+void removeEmptyChannels(std::vector<Channel>& channels);
+Client* findClient(std::vector<Client>& clients, int fd);
+Client* findClientByNick(std::vector<Client>& clients, const std::string& nick);
+std::vector<Client>::iterator findClientIt(std::vector<Client>& clients, int fd);
+Channel* findChannel(std::vector<Channel>& channels, const std::string& name);
+bool sendToClient(std::vector<Client>& clients, int fd, const std::string& msg);
+void sendToAll(std::vector<Client>& clients, int sender_fd, const std::string& msg);
+void sendToChannel(std::vector<Client>& clients, Channel* channel, int sender, const std::string& msg);
+void sendToAllChannels(std::vector<Client>& clients, std::vector<Channel>& channel_list, Client* sender, const std::string& msg);
+void sendError(std::vector<Client>& clients, int fd, const std::string& code, const std::string& msg);
+void	removeClientFromAllChannels(std::vector<Client>& clients, std::vector<Channel>& channels, int client);
+bool isValidPort(const std::string& str, int& port);
+void CreateUserList(std::vector<Client>& clients, Channel* channel, std::string& user_list);
+void parseCommand(const std::string& line, std::string& command, std::vector<std::string>& args);

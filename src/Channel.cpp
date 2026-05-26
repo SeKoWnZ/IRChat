@@ -1,5 +1,14 @@
 #include <Channel.hpp>
 
+Channel::Channel() :
+	_name(""), 
+	_topic(""),
+	_key(""),
+	_user_limit(-1),
+	_invite_only(false),
+	_topic_protected(false)
+{}
+
 Channel::Channel(const std::string name) :
 	_name(name), 
 	_topic(""),
@@ -10,6 +19,35 @@ Channel::Channel(const std::string name) :
 {}
 
 Channel::~Channel(){}
+
+Channel::Channel(const Channel& other) :
+	_name(other._name),
+	_topic(other._topic),
+	_key(other._key),
+	_user_limit(other._user_limit),
+	_clients(other._clients),
+	_operators(other._operators),
+	_invited(other._invited),
+	_invite_only(other._invite_only),
+	_topic_protected(other._topic_protected)
+{}
+
+Channel& Channel::operator=(const Channel& other)
+{
+	if (this != &other)
+	{
+		const_cast<std::string&>(_name) = other._name;
+		_topic = other._topic;
+		_key = other._key;
+		_user_limit = other._user_limit;
+		_clients = other._clients;
+		_operators = other._operators;
+		_invited = other._invited;
+		_invite_only = other._invite_only;
+		_topic_protected = other._topic_protected;
+	}
+	return *this;
+}
 
 std::string Channel::getName() const
 {
