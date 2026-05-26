@@ -3,10 +3,10 @@
 #                                                         :::      ::::::::    #
 #    Makefile                                           :+:      :+:    :+:    #
 #                                                     +:+ +:+         +:+      #
-#    By: sarajime <sarajime@student.42malaga.com>   +#+  +:+       +#+         #
+#    By: jose-gon <jose-gon@student.42malaga.com>   +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2025/10/22 10:30:18 by jose-gon          #+#    #+#              #
-#    Updated: 2026/05/25 18:50:39 by sarajime         ###   ########.fr        #
+#    Updated: 2026/05/26 22:02:02 by jose-gon         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -18,7 +18,7 @@ SRC_DIR = src
 OBJ_DIR = obj
 INC_DIR = ./include
 
-FILES = main.cpp
+FILES = main.cpp Client.cpp Channel.cpp
 OBJ_FILES = $(addprefix $(OBJ_DIR)/, $(FILES:.cpp=.o))
 
 all : $(NAME)

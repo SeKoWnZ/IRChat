@@ -57,7 +57,7 @@ struct Channel
 
 	bool invite_only;
 	bool topic_protected;
-
+	
 };
 
 bool isClientInChannel(Channel* channel, Client* client)
@@ -501,17 +501,7 @@ int	main(int argc, char** argv)
 						std::string line = client->buffer.substr(0, pos);
 						if (!line.empty() && line[line.size() - 1] == '\r')
 							line.erase(line.size() - 1);
-						std::cout << line << std::endl;
-						// std::istringstream iss(line);
-						// std::string command;
-						// iss >> command;
-						
-						// std::vector<std::string> args;
-						// std::string arg;
-
-						// while (iss >> arg) // SE PUEDEN USAR MARCADORES PARA SACAR STRINGS ENTEROS
-						// 	args.push_back(arg);
-
+							
 						std::string command;
 						std::vector<std::string> args;
 
