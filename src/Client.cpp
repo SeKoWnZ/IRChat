@@ -65,7 +65,7 @@ std::string Client::getUsername() const
 	return _username;
 }
 
-std::string Client::getBuffer() const
+std::string& Client::getBuffer()
 {
 	return _buffer;
 }

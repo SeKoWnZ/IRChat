@@ -59,12 +59,3 @@ class Channel
 		void setTopicProtected(const bool topic_protected);
 
 };
-
-
-// ▄▀─────────────▀▄
-// █▄█──█▀█─█▀█─▄█▄█
-// ─▀██▄▀▄▀─▀▄▀▄██▀
-// ░░░▄██▀███▀███▄
-// ░▐▀█▀██▄▄▄██▀█▀▌
-
-

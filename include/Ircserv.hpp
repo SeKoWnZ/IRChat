@@ -38,3 +38,18 @@ void	removeClientFromAllChannels(std::vector<Client>& clients, std::vector<Chann
 bool isValidPort(const std::string& str, int& port);
 void CreateUserList(std::vector<Client>& clients, Channel* channel, std::string& user_list);
 void parseCommand(const std::string& line, std::string& command, std::vector<std::string>& args);
+
+//CMD
+
+int cmdNick(std::vector<Client> &clients, Client *client, std::vector<std::string> &args);
+int cmdUser(std::vector<Client> &clients, Client *client, std::vector<std::string> &args);
+int cmdPass(std::vector<Client> &clients, Client *client, std::vector<std::string> &args, std::string &server_password);
+int cmdPrivmsg(std::vector<Client> &clients, std::vector<Channel> &channels, Client *client, std::vector<std::string> &args);
+int cmdJoin(std::vector<Client> &clients, std::vector<Channel> &channels, Client *client, std::vector<std::string> &args);
+int cmdInvite(std::vector<Client> &clients, std::vector<Channel> &channels, Client *client, std::vector<std::string> &args);
+int cmdMode(std::vector<Client> &clients, std::vector<Channel> &channels, Client *client, std::vector<std::string> &args);
+int cmdTopic(std::vector<Client> &clients, std::vector<Channel> &channels, Client *client, std::vector<std::string> &args);
+int cmdKick(std::vector<Client> &clients, std::vector<Channel> &channels, Client *client, std::vector<std::string> &args);
+int cmdPart(std::vector<Client> &clients, std::vector<Channel> &channels, Client *client, std::vector<std::string> &args);
+int cmdQuit(std::vector<Client> &clients, std::vector<Channel> &channels, Client *client, std::vector<std::string> &args);
+

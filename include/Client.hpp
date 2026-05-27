@@ -28,7 +28,7 @@ class Client
 		int getFd() const;
 		std::string getNickname() const;
 		std::string getUsername() const;
-		std::string getBuffer() const;
+		std::string& getBuffer();
 		std::string getSend_buffer() const;
 		bool getRegistered() const;
 		bool getPass_ok() const;
